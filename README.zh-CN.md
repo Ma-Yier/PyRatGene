@@ -6,7 +6,7 @@
 
 RatGene 用于搜索能够将目标代谢物生产与细胞生长偶联起来的基因/反应删除（以及可选的添加）策略。它支持基于 GPR 规则的基因逻辑、两步式策略规模缩减、模型整合，以及目标产率的最坏/最好情况分析。
 
-本包是 [`RatGene-main/`](RatGene-main/) 中 MATLAB 实现的 Python 移植版本。默认使用 **SCIP**（通过 [`PySCIPOpt`](https://github.com/scipopt/PySCIPOpt)）；如果安装了相应的 Python API，也可以使用 **IBM ILOG CPLEX** 或 **Gurobi**。原 MATLAB 实现使用 CPLEX。
+本包是 [`RatGene-main/`](https://github.com/Ma-Yier/RatGene) 中 MATLAB 实现的 Python 移植版本。默认使用 **SCIP**（通过 [`PySCIPOpt`](https://github.com/scipopt/PySCIPOpt)）；如果安装了相应的 Python API，也可以使用 **IBM ILOG CPLEX** 或 **Gurobi**。原 MATLAB 实现使用 CPLEX。
 
 ---
 

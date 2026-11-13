@@ -11,7 +11,7 @@ gene rules, a two-step strategy-size reduction, model integration, and
 worst-case/best-case target-rate analysis.
 
 This package is a Python port of the MATLAB implementation in
-[`RatGene-main/`](RatGene-main/). It supports **SCIP** through
+[`RatGene-main/`](https://github.com/Ma-Yier/RatGene). It supports **SCIP** through
 [`PySCIPOpt`](https://github.com/scipopt/PySCIPOpt) as the default solver, and
 can also use **IBM ILOG CPLEX** or **Gurobi** when their Python APIs are
 installed. The original MATLAB implementation uses CPLEX.
