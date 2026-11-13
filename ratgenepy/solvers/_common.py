@@ -14,7 +14,7 @@ from .._utils import _as_vec, _normalize_vtype
 # mip.tolerances.integrality, Gurobi documents [1e-9, 1e-1] for IntFeasTol,
 # and SCIP uses numerics/feastol with range [1e-17, 1e-3].
 _MIN_INTEGER_TOLERANCE = {
-    "scip": 1e-12,
+    "scip": 1e-10,
     "cplex": 1e-12,
     "gurobi": 1e-9,
 }
