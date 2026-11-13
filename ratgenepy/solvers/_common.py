@@ -9,6 +9,36 @@ import numpy as np
 from .._utils import _as_vec, _normalize_vtype
 
 
+# Smallest/largest values accepted by each backend for the integrality
+# (or closest equivalent) tolerance.  CPLEX documents [0.0, 0.5] for
+# mip.tolerances.integrality, Gurobi documents [1e-9, 1e-1] for IntFeasTol,
+# and SCIP uses numerics/feastol with range [1e-17, 1e-3].
+_MIN_INTEGER_TOLERANCE = {
+    "scip": 1e-12,
+    "cplex": 1e-12,
+    "gurobi": 1e-9,
+}
+_MAX_INTEGER_TOLERANCE = {
+    "scip": 1e-3,
+    "cplex": 0.5,
+    "gurobi": 1e-1,
+}
+
+
+def resolve_integer_tolerance(problem: Dict[str, Any], backend: str) -> float:
+    """Return the integrality tolerance, clamped to the backend's range.
+
+    ``integerTolerance=None`` means "use the smallest value supported by the
+    selected backend".
+    """
+    lower = _MIN_INTEGER_TOLERANCE[backend]
+    upper = _MAX_INTEGER_TOLERANCE[backend]
+    value = problem.get("integerTolerance")
+    if value is None:
+        return lower
+    return float(min(max(float(value), lower), upper))
+
+
 def _as_2d(value) -> np.ndarray:
     """Convert a constraint matrix to a dense 2-D array."""
     if value is None:
@@ -61,6 +91,12 @@ def normalize_problem(objfunc, kwargs) -> Dict[str, Any]:
     else:
         vtype = [str(v).upper() for v in _normalize_vtype(kwargs.get("vtype"), n)]
 
+    integer_tolerance = kwargs.get("integerTolerance")
+    if integer_tolerance is not None:
+        integer_tolerance = float(integer_tolerance)
+        if not np.isfinite(integer_tolerance) or integer_tolerance < 0:
+            raise ValueError("integerTolerance must be a finite non-negative value")
+
     return {
         "obj": objective,
         "Aeq": Aeq,
@@ -73,4 +109,5 @@ def normalize_problem(objfunc, kwargs) -> Dict[str, Any]:
         "opt": opt,
         "timeLimit": kwargs.get("timeLimit"),
         "pool": max(0, int(kwargs.get("pool", 0) or 0)),
+        "integerTolerance": integer_tolerance,
     }

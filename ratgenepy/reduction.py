@@ -11,7 +11,7 @@ from .model import Model
 from .solvers import solver
 
 def rmRedundancy(model: Model, knockouts, id_target: int, id_biomass: int,
-                 split, backend: str = "scip"):
+                 split, backend: str = "scip", integerTolerance=None):
     """Two-step approach reducing the size of a modification strategy.
 
     ``split`` is ``[0, 0]`` for a pure deletion problem or
@@ -59,7 +59,7 @@ def rmRedundancy(model: Model, knockouts, id_target: int, id_biomass: int,
 
     newKnockouts = _reduce_one(
         model1, knockouts, var_x, endRxn, endGene, parInfo,
-        deletion=True, backend=backend
+        deletion=True, backend=backend, integerTolerance=integerTolerance
     )
     preDel = int(np.sum(knockouts == 0))
     afterDel = int(np.sum(newKnockouts == 0))
@@ -73,7 +73,8 @@ def rmRedundancy(model: Model, knockouts, id_target: int, id_biomass: int,
 
     newAdditions = _reduce_one(
         model2, additions, var_a, len(model2.rxns), len(model2.genes),
-        parInfo2, deletion=False, backend=backend
+        parInfo2, deletion=False, backend=backend,
+        integerTolerance=integerTolerance
     )
     preAdd = int(np.sum(additions == 1))
     afterAdd = int(np.sum(newAdditions == 1))
@@ -84,7 +85,7 @@ def rmRedundancy(model: Model, knockouts, id_target: int, id_biomass: int,
 
 def _reduce_one(model: Model, knockouts: np.ndarray, var_x: np.ndarray,
                 endRxn: int, endGene: int, parInfo, deletion: bool,
-                backend: str = "scip"):
+                backend: str = "scip", integerTolerance=None):
     genes = list(model.genes[:endGene])
     grRules = model.grRules
 
@@ -176,7 +177,8 @@ def _reduce_one(model: Model, knockouts: np.ndarray, var_x: np.ndarray,
     vtype = "B" * (a + bb + cnum)
 
     _, x = solver(f, A=A, b=b.ravel(), Aeq=Aeq, beq=beq, lb=lb, ub=ub,
-                  opt="milp", vtype=vtype, backend=backend)
+                  opt="milp", vtype=vtype, backend=backend,
+                  integerTolerance=integerTolerance)
 
     if x is None or cnum == 0:
         return knockouts.copy()

@@ -85,6 +85,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         choices=["scip", "cplex", "gurobi"],
         help="LP/MILP solver backend (default: scip)"
     )
+    parser.add_argument(
+        "--integerTolerance", type=float, default=None,
+        help=("MILP integrality tolerance (default: the smallest value "
+              "supported by the selected backend)")
+    )
 
     args = parser.parse_args(argv)
 
@@ -110,6 +115,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         size=reduce_size,
         addition=addition,
         backend=args.backend,
+        integerTolerance=args.integerTolerance,
     )
 
     x_target = result[0]

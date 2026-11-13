@@ -11,7 +11,7 @@ from typing import List
 
 import numpy as np
 
-from ._common import normalize_problem
+from ._common import normalize_problem, resolve_integer_tolerance
 
 
 def _require_gurobi():
@@ -61,6 +61,9 @@ def gurobi_solver(objfunc, **kwargs):
 
     model = gp.Model()
     model.Params.OutputFlag = 0
+
+    if problem["opt"] == "milp":
+        model.Params.IntFeasTol = resolve_integer_tolerance(problem, "gurobi")
 
     type_map = {
         "C": GRB.CONTINUOUS,

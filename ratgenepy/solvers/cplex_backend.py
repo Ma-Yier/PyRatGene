@@ -11,7 +11,7 @@ from typing import List
 
 import numpy as np
 
-from ._common import normalize_problem
+from ._common import normalize_problem, resolve_integer_tolerance
 
 
 def _require_cplex():
@@ -125,6 +125,11 @@ def cplex_solver(objfunc, **kwargs):
         pass
 
     cpx.objective.set_sense(cpx.objective.sense.minimize)
+
+    if problem["opt"] == "milp":
+        cpx.parameters.mip.tolerances.integrality.set(
+            resolve_integer_tolerance(problem, "cplex")
+        )
 
     type_map = {
         "C": cpx.variables.type.continuous,

@@ -13,7 +13,8 @@ from .verification import verifyGeneKnock, verifyKnock
 
 def ratioGene(model: Model, id_biomass: int, id_target: int, TMGR: float,
               max_loop: int, gap: float, numMultiStrat: int,
-              timeLimit: float, backend: str = "scip"):
+              timeLimit: float, backend: str = "scip",
+              integerTolerance=None):
     """Gene deletion or deletion/addition strategy search (ratioGene.m)."""
     (lessMatrixLeft, lessMatrixRight, equalMatrixLeft, equalMatrixRight,
      nGpr, nAux, nGen, indGPR) = constructMatrix(model)
@@ -59,6 +60,7 @@ def ratioGene(model: Model, id_biomass: int, id_target: int, TMGR: float,
             f, A=A, b=b, Aeq=Aeq, beq=beq, lb=lb, ub=ub,
             opt="milp", vtype=vtype, timeLimit=milpTime,
             pool=numMultiStrat, backend=backend,
+            integerTolerance=integerTolerance,
         )
 
         if best is not None:

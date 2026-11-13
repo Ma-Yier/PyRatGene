@@ -226,6 +226,7 @@ The CLI also accepts:
 -t, --timeLimit SECONDS
 -p, --pool N
 --backend scip|cplex|gurobi   (alias: --solver)
+--integerTolerance VALUE
 ```
 
 The original single-file entry point remains available:
@@ -263,6 +264,7 @@ RatGene(
     size=1,
     addition=None,
     backend="scip",
+    integerTolerance=None,
 )
 ```
 
@@ -283,6 +285,7 @@ RatGene(
 | `size` | `1` | `1` = reduce gene strategy size, `0` = no reduction |
 | `addition` | `None` | Additional model for a deletion/addition problem |
 | `backend` | `"scip"` | LP/MILP backend: `"scip"`, `"cplex"`, or `"gurobi"` |
+| `integerTolerance` | `None` | MILP integrality tolerance; `None` uses each backend's minimum |
 
 ### Output
 
@@ -497,6 +500,7 @@ handle, x = solver(
     vtype="B" * n,
     pool=10,           # keep up to 10 MILP candidates
     timeLimit=60,
+    integerTolerance=None,  # None = backend minimum; 1e-9 also valid
 )
 
 # Backend-specific entry points are also available:
@@ -515,6 +519,19 @@ where `handle` is the backend model object and `x` is the best solution vector
 or `None` if the problem is infeasible. The `pool` argument configures the
 CPLEX/Gurobi solution pool; use `pool_solutions(handle, limit)` to retrieve
 candidate solutions in best-objective-first order.
+
+For MILP problems, `integerTolerance` controls the integrality tolerance. When
+it is omitted, each backend is set to its minimum supported value:
+
+| Backend | Parameter | Minimum |
+|---|---|---|
+| SCIP | `numerics/feastol` (closest equivalent) | `1e-17` |
+| CPLEX | `mip.tolerances.integrality` | `0.0` |
+| Gurobi | `IntFeasTol` | `1e-9` |
+
+Pass `integerTolerance=1e-9` explicitly to use the MATLAB
+`OPTIONS.IntegerTolerance` value on all three backends. Very tight tolerances
+can increase runtime and expose numerical difficulties.
 
 Installing `gurobipy` or the CPLEX Python API is optional. If a selected
 backend is unavailable, `solver` raises an informative `ImportError`.

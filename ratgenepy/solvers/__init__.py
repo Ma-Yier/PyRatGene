@@ -68,6 +68,11 @@ def solver(objfunc, backend="scip", **kwargs):
         ``vtype``    : variable types for MILP (``"C"``, ``"B"`` or ``"I"``)
         ``pool``     : maximum number of candidate solutions kept for verification
         ``timeLimit``: solver time limit in seconds
+        ``integerTolerance``: integrality tolerance for MILP.  If omitted,
+            the smallest value supported by the selected backend is used:
+            SCIP ``numerics/feastol`` = ``1e-17``, CPLEX
+            ``mip.tolerances.integrality`` = ``0.0``, Gurobi
+            ``IntFeasTol`` = ``1e-9``.
 
     Returns
     -------

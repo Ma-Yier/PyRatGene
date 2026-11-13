@@ -209,6 +209,7 @@ ratgene core.mat TARGET_MET_ID \
 -t, --timeLimit SECONDS
 -p, --pool N
 --backend scip|cplex|gurobi   （别名：--solver）
+--integerTolerance VALUE
 ```
 
 原有的单文件入口仍然可用：
@@ -246,6 +247,7 @@ RatGene(
     size=1,
     addition=None,
     backend="scip",
+    integerTolerance=None,
 )
 ```
 
@@ -266,6 +268,7 @@ RatGene(
 | `size` | `1` | `1` = 缩减基因策略规模，`0` = 不缩减 |
 | `addition` | `None` | 删除/添加问题中提供添加信息的模型 |
 | `backend` | `"scip"` | LP/MILP 求解后端：`"scip"`、`"cplex"` 或 `"gurobi"` |
+| `integerTolerance` | `None` | MILP 整数容差；`None` 表示使用各后端的最小值 |
 
 ### 返回值
 
@@ -471,6 +474,7 @@ handle, x = solver(
     vtype="B" * n,
     pool=10,           # 保留最多 10 个 MILP 候选解
     timeLimit=60,
+    integerTolerance=None,  # None = 后端最小值；1e-9 也可用
 )
 
 # 也可以直接调用特定后端：
@@ -485,6 +489,16 @@ candidates = pool_solutions(handle, limit=10)
 ```
 
 `solver` 始终最小化线性目标函数，并返回 `(handle, x)`。其中 `handle` 是后端模型对象，`x` 是最优解向量；如果问题不可行则为 `None`。`pool` 参数用于配置 CPLEX/Gurobi 解池；可以通过 `pool_solutions(handle, limit)` 按目标值从优到劣获取候选解。
+
+对于 MILP 问题，`integerTolerance` 控制整数容差。省略该参数时，每个后端会使用其支持的最小值：
+
+| 后端 | 参数 | 最小值 |
+|---|---|---|
+| SCIP | `numerics/feastol`（最接近的等价参数） | `1e-17` |
+| CPLEX | `mip.tolerances.integrality` | `0.0` |
+| Gurobi | `IntFeasTol` | `1e-9` |
+
+如果要统一使用 MATLAB 的 `OPTIONS.IntegerTolerance` 值，可以显式传入 `integerTolerance=1e-9`。容差过小可能增加运行时间，并放大数值问题。
 
 `gurobipy` 和 CPLEX Python API 都是可选依赖。如果选择的后端不可用，`solver` 会抛出带有说明的 `ImportError`。
 

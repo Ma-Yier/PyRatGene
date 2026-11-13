@@ -7,7 +7,7 @@ from typing import Any, List, Tuple
 
 import numpy as np
 
-from ._common import normalize_problem
+from ._common import normalize_problem, resolve_integer_tolerance
 
 _SCIP_VARIABLES = weakref.WeakKeyDictionary()
 
@@ -25,11 +25,16 @@ def _require_scip():
 
 
 def _make_problem(objfunc, Aeq, beq, A, b, lb, ub, vtype,
-                  timeLimit=None, pool=None) -> Tuple[Any, list]:
+                  timeLimit=None, pool=None,
+                  integerTolerance=None) -> Tuple[Any, list]:
     ScipModel, quicksum = _require_scip()
     n = len(lb)
     scip = ScipModel()
     scip.hideOutput()
+    if integerTolerance is not None:
+        # SCIP has no separate integrality tolerance; numerics/feastol is
+        # the closest equivalent and controls integrality feasibility.
+        scip.setParam("numerics/feastol", float(integerTolerance))
 
     variables = []
     for i in range(n):
@@ -82,6 +87,10 @@ def scip_solver(objfunc, **kwargs):
     accepted keyword arguments.
     """
     problem = normalize_problem(objfunc, kwargs)
+    integer_tolerance = (
+        resolve_integer_tolerance(problem, "scip")
+        if problem["opt"] == "milp" else None
+    )
     scip, variables = _make_problem(
         problem["obj"],
         problem["Aeq"], problem["beq"],
@@ -90,6 +99,7 @@ def scip_solver(objfunc, **kwargs):
         problem["vtype"],
         timeLimit=problem["timeLimit"],
         pool=problem["pool"],
+        integerTolerance=integer_tolerance,
     )
     scip.optimize()
 

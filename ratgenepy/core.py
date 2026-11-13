@@ -15,13 +15,16 @@ from .solvers import optimizeCbModel
 def RatGene(model, targetMet, biomass=None, carbon="EX_glc__D_e",
             oxygen="EX_o2_e", LBbiomass=0.05, LBcarbon=-15.0,
             LBoxygen=-15.0, maxLoop=1000, timeLimit=float("inf"), pool=10,
-            type=1, size=1, addition=None, backend="scip"):
+            type=1, size=1, addition=None, backend="scip",
+            integerTolerance=None):
     """Ratio-based gene/reaction modification strategy search.
 
     Parameters follow ``RatGene.m``.  ``type`` is 1 for genes and 0 for
     reactions; ``size`` is 1 when the reduction procedure is applied.
     ``backend`` selects the LP/MILP solver: ``"scip"`` (default),
-    ``"cplex"`` or ``"gurobi"``.
+    ``"cplex"`` or ``"gurobi"``.  ``integerTolerance`` sets the MILP
+    integrality tolerance; when omitted, each backend uses its smallest
+    supported value.
 
     Returns
     -------
@@ -96,7 +99,7 @@ def RatGene(model, targetMet, biomass=None, carbon="EX_glc__D_e",
         x_target, _, knockout = ratioGene(
             new_model, id_biomass, id_target, TMGR, maxLoop,
             TMPR / (maxLoop * LBbiomass), pool, timeLimit,
-            backend=backend
+            backend=backend, integerTolerance=integerTolerance
         )
 
         if np.asarray(knockout).size == 0:
@@ -109,7 +112,7 @@ def RatGene(model, targetMet, biomass=None, carbon="EX_glc__D_e",
                      if addition_problem else [0, 0])
             _, _, newKnockout = rmRedundancy(
                 new_model, knockout, id_target, id_biomass, split,
-                backend=backend
+                backend=backend, integerTolerance=integerTolerance
             )
 
         if not addition_problem:
