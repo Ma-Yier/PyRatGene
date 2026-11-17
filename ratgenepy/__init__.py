@@ -10,7 +10,13 @@ from __future__ import annotations
 
 from .analysis import boundAnalysis
 from .candidates import getCandidateAdd, getCandidateDel
-from .core import RatGene
+from .changelog import (
+    ChangeLog,
+    ChangeLogEntry,
+    reaction_compartment,
+    reaction_formula,
+)
+from .core import RatGene, RatGeneResult
 from .exchange import introExchange
 from .gpr import constructMatrix, locateGene, maxParseGPR, verifyRatioGene
 from .integrate import findDiffGene, uniteGeneModel
@@ -31,8 +37,11 @@ from .verification import verifyGeneKnock, verifyKnock
 __version__ = "1.0.0"
 
 __all__ = [
+    "ChangeLog",
+    "ChangeLogEntry",
     "Model",
     "RatGene",
+    "RatGeneResult",
     "RatMethodRxn",
     "available_solvers",
     "boundAnalysis",
@@ -49,6 +58,8 @@ __all__ = [
     "pool_solutions",
     "ratioGene",
     "ratioMethod",
+    "reaction_compartment",
+    "reaction_formula",
     "rmRedundancy",
     "scip_solver",
     "solver",

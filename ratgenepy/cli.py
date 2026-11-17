@@ -86,6 +86,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="LP/MILP solver backend (default: scip)"
     )
     parser.add_argument(
+        "--targetType", "--target-type", dest="target_type", type=str,
+        default="auto", choices=["auto", "secretion", "demand"],
+        help=("target production outlet: auto (prefer EX_), secretion (EX_) "
+              "or demand (DM_) (default: auto)")
+    )
+    parser.add_argument(
+        "--changeLog", "--change-log", dest="change_log", type=str,
+        default=None,
+        help=("write a change log (reaction ids, formulas, compartments, "
+              "old/new bounds and reasons) to a .json, .csv or text file")
+    )
+    parser.add_argument(
         "--integerTolerance", type=float, default=None,
         help=("MILP integrality tolerance (default: the smallest value "
               "supported by the selected backend)")
@@ -116,20 +128,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         addition=addition,
         backend=args.backend,
         integerTolerance=args.integerTolerance,
+        target_type=args.target_type,
+        return_changelog=True,
+        change_log_file=args.change_log,
     )
 
     x_target = result[0]
     knockouts = result[1]
+    change_log = result[-1]
     print(f"The number of knockouts is: {len(knockouts)}")
-    if len(result) > 2:
+    if len(result) > 3:
         print(f"The number of additions is: {len(result[2])}")
     print(f"The target reaction rate with the strategy applied: {x_target:.4f} mmol/gDW/h")
     print("Knockouts:")
     for name in knockouts:
         print(f"  {name}")
-    if len(result) > 2:
+    if len(result) > 3:
         print("Additions:")
         for name in result[2]:
             print(f"  {name}")
+
+    print("\nChange log:")
+    print(change_log.to_text())
+    if args.change_log:
+        print(f"\nChange log written to: {args.change_log}")
 
     return 0

@@ -28,6 +28,9 @@ class Model:
         self.metNames = kwargs.get("metNames", [])
         self.metFormulas = kwargs.get("metFormulas", [])
         self.metCharge = kwargs.get("metCharge", None)
+        self.compartments = kwargs.get("compartments", [])
+        self.compartmentNames = kwargs.get("compartmentNames", [])
+        self.metCompartments = kwargs.get("metCompartments", [])
         self.rxns = kwargs.get("rxns", [])
         self.rxnNames = kwargs.get("rxnNames", [])
         self.subSystems = kwargs.get("subSystems", [])
@@ -91,6 +94,9 @@ class Model:
             metNames=_as_cellstr(get("metNames")),
             metFormulas=_as_cellstr(get("metFormulas")),
             metCharge=metCharge,
+            compartments=_as_cellstr(get("compartments")),
+            compartmentNames=_as_cellstr(get("compartmentNames")),
+            metCompartments=_as_cellstr(get("metCompartments")),
             rxns=_as_cellstr(get("rxns")),
             rxnNames=_as_cellstr(get("rxnNames")),
             subSystems=_as_cellstr(get("subSystems")),
