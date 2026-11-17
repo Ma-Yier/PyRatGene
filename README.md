@@ -26,6 +26,8 @@ installed. The original MATLAB implementation uses CPLEX.
 - Target exchange detection or automatic introduction
 - MILP solution-pool based candidate verification
 - Pluggable LP/MILP backends: SCIP (default), CPLEX, and Gurobi
+- Explicit distinction between secretion outlets (`EX_`) and intracellular demands (`DM_`)
+- Per-run change log with reaction IDs, formulas, compartments, old/new bounds, and reasons
 - Two-step reduction of gene strategy size
 - Integration of a core model and an addition model
 - Worst-case / best-case target production analysis
@@ -139,6 +141,52 @@ print(f"Number of knockouts: {len(knockouts)}")
 print(knockouts)
 ```
 
+### Change log
+
+Every `RatGene` call builds a change log. The log records each reaction whose
+bounds change, including reactions introduced by `introExchange`, reactions
+disabled by gene/reaction deletions, and reactions enabled by added genes. Each
+entry contains the reaction ID, reaction formula, compartment, old and new
+bounds, and the reason for the change.
+
+```python
+x_target, knockouts, changes = RatGene(
+    model,
+    target_met,
+    return_changelog=True,
+)
+
+for entry in changes:
+    print(entry["reaction_id"], entry["formula"], entry["compartment"],
+          entry["old_bounds"], "->", entry["new_bounds"], entry["reason"])
+
+# Human-readable table, JSON or CSV.
+print(changes.to_text())
+changes.to_json("changes.json")
+changes.to_csv("changes.csv")
+```
+
+The log can also be written directly by `RatGene`:
+
+```python
+RatGene(model, target_met, change_log_file="changes.json")
+
+# Or fill an external list while keeping the normal return value.
+log = []
+x_target, knockouts = RatGene(model, target_met, changelog=log)
+```
+
+`RatGene.last_change_log` always refers to the most recent run. In addition,
+the returned tuple is a `RatGeneResult` with a `change_log` attribute, so the
+default API remains unchanged while still exposing the log:
+
+```python
+result = RatGene(model, target_met)
+print(result.change_log.to_text())
+print(result.target_info)   # e.g. {"kind": "secretion", "role": "secretion_outlet", ...}
+x_target, knockouts = result
+```
+
 Select a solver backend with `backend="scip"` (default), `backend="cplex"`, or
 `backend="gurobi"`:
 
@@ -226,6 +274,8 @@ The CLI also accepts:
 -t, --timeLimit SECONDS
 -p, --pool N
 --backend scip|cplex|gurobi   (alias: --solver)
+--targetType auto|secretion|demand
+--changeLog FILE               (.json, .csv or text)
 --integerTolerance VALUE
 ```
 
@@ -265,6 +315,10 @@ RatGene(
     addition=None,
     backend="scip",
     integerTolerance=None,
+    target_type="auto",
+    return_changelog=False,
+    changelog=None,
+    change_log_file=None,
 )
 ```
 
@@ -286,6 +340,10 @@ RatGene(
 | `addition` | `None` | Additional model for a deletion/addition problem |
 | `backend` | `"scip"` | LP/MILP backend: `"scip"`, `"cplex"`, or `"gurobi"` |
 | `integerTolerance` | `None` | MILP integrality tolerance; `None` uses each backend's minimum |
+| `target_type` | `"auto"` | Target outlet: `"auto"` (prefer `EX_` secretion, then `DM_` demand), `"secretion"`, or `"demand"` |
+| `return_changelog` | `False` | Append the `ChangeLog` to the returned tuple |
+| `changelog` | `None` | Optional `ChangeLog` or list to fill with entries |
+| `change_log_file` | `None` | Write the log to `.json`, `.csv`, or a text file |
 
 ### Output
 
@@ -297,6 +355,12 @@ RatGene(
   `(x_target, knockouts)`
 - `type=0`, with addition:
   `(x_target, deletions, additions)`
+
+When `return_changelog=True`, a `ChangeLog` is appended as the last element.
+The log is a list of dictionary-like entries with `reaction_id`, `formula`,
+`compartment`, `old_bounds`, `new_bounds`, and `reason` keys, plus the
+`change_type`, `role`, `introduced` and `genes` details. `ChangeLog.metadata`
+contains the selected target outlet information.
 
 `x_target` is the target exchange reaction rate after applying the strategy.
 Gene strategy vectors use `1` for an active/present gene and `0` for a deleted
@@ -366,16 +430,31 @@ The main algorithm is also available as individual functions. Indices are
 from ratgenepy import uniteGeneModel, introExchange
 
 united = uniteGeneModel(core_model, addition_model)
-new_model, id_target, TMPR = introExchange(
+new_model, id_target, TMPR, info = introExchange(
     united, id_biomass, [id_carbon, id_oxygen], id_target_met,
     backend="scip",
+    target_type="auto",   # "auto", "secretion" or "demand"
+    return_info=True,
 )
+print(info["kind"], info["role"])  # "secretion"/"secretion_outlet"
 ```
 
 - `uniteGeneModel(model1, model2)` merges two models and their gene/reaction
   relationships.
-- `introExchange(...)` finds an existing `EX_<met>` or `DM_<met>` reaction, or
-  appends a new target exchange reaction named `EX_target`.
+- `introExchange(...)` finds an existing secretion outlet (`EX_<met>`), an
+  existing intracellular demand (`DM_<met>`), or appends a virtual target
+  reaction. `target_type` makes the choice explicit:
+  - `"auto"` prefers `EX_` (secretion), then `DM_` (demand), then creates
+    `EX_target`;
+  - `"secretion"` accepts only an `EX_` outlet and otherwise creates
+    `EX_target`;
+  - `"demand"` accepts only a `DM_` outlet and otherwise creates `DM_target`.
+- A blocked outlet (upper bound `<= 0`) is reopened for positive production
+  flux, and this bound change is recorded in the change log. A newly created
+  identifier gets a numeric suffix if `EX_target`/`DM_target` is already used.
+- `info` reports the selected reaction, its `kind`/`role`, compartment,
+  bounds, whether it was introduced or opened, and whether both outlet kinds
+  existed.
 - `TMPR` is the theoretical maximum production rate of the target.
 
 ### Ratio-based search
@@ -661,8 +740,10 @@ Reduced addition genes:
 
 ## Algorithm overview
 
-1. **Target exchange setup** — `introExchange` locates or creates the target
-   exchange reaction and computes the theoretical maximum production rate.
+1. **Target outlet setup** — `introExchange` explicitly distinguishes
+   secretion outlets (`EX_`) from intracellular demands (`DM_`), locates or
+   creates the target outlet, and computes the theoretical maximum production
+   rate.
 2. **GPR matrix construction** — `maxParseGPR` and `constructMatrix` convert
    gene–protein–reaction rules into linear Boolean constraints.
 3. **Ratio-based MILP search** — `ratioGene` or `ratioMethod` iteratively
@@ -685,6 +766,7 @@ ratgenepy/
 ├── __main__.py         # python -m ratgenepy
 ├── _utils.py           # MATLAB conversion, matrix and indexing helpers
 ├── model.py            # Model container and .mat loading
+├── changelog.py        # ChangeLog entries, formulas and compartment helpers
 ├── solvers/
 │   ├── __init__.py     # backend dispatch, solver, pool_solutions
 │   ├── _common.py      # shared LP/MILP argument normalization

@@ -18,6 +18,8 @@ RatGene 用于搜索能够将目标代谢物生产与细胞生长偶联起来的
 - 目标交换反应检测或自动添加
 - 基于 MILP 解池的候选策略验证
 - 可切换的 LP/MILP 求解后端：SCIP（默认）、CPLEX 和 Gurobi
+- 显式区分分泌出口（`EX_`）与胞内需求反应（`DM_`）
+- 每次运行生成变更日志（反应 ID、反应式、区室、旧/新边界和原因）
 - 两步式基因策略规模缩减
 - 核心模型与添加模型的整合
 - 目标生产的最坏/最好情况分析
@@ -123,6 +125,49 @@ print(f"敲除数量: {len(knockouts)}")
 print(knockouts)
 ```
 
+### 变更日志
+
+每次调用 `RatGene` 都会生成变更日志。日志记录所有边界发生变化的反应，
+包括 `introExchange` 新引入的目标反应、被基因/反应删除策略关闭的反应，
+以及由添加基因开启的反应。每条记录包含反应 ID、反应式、区室、旧/新边界
+和变更原因。
+
+```python
+x_target, knockouts, changes = RatGene(
+    model,
+    target_met,
+    return_changelog=True,
+)
+
+for entry in changes:
+    print(entry["reaction_id"], entry["formula"], entry["compartment"],
+          entry["old_bounds"], "->", entry["new_bounds"], entry["reason"])
+
+# 可输出为文本表格、JSON 或 CSV。
+print(changes.to_text())
+changes.to_json("changes.json")
+changes.to_csv("changes.csv")
+```
+
+也可以让 `RatGene` 直接写文件，或填充外部列表：
+
+```python
+RatGene(model, target_met, change_log_file="changes.json")
+
+log = []
+x_target, knockouts = RatGene(model, target_met, changelog=log)
+```
+
+`RatGene.last_change_log` 始终指向最近一次运行的日志。此外，返回值是一个带有
+`change_log` 属性的 `RatGeneResult`，因此默认 API 保持不变，同时仍可访问日志：
+
+```python
+result = RatGene(model, target_met)
+print(result.change_log.to_text())
+print(result.target_info)   # 例如 {"kind": "secretion", "role": "secretion_outlet", ...}
+x_target, knockouts = result
+```
+
 可以通过 `backend="scip"`（默认）、`backend="cplex"` 或 `backend="gurobi"`
 选择求解后端：
 
@@ -209,6 +254,8 @@ ratgene core.mat TARGET_MET_ID \
 -t, --timeLimit SECONDS
 -p, --pool N
 --backend scip|cplex|gurobi   （别名：--solver）
+--targetType auto|secretion|demand
+--changeLog FILE               （.json、.csv 或文本）
 --integerTolerance VALUE
 ```
 
@@ -248,6 +295,10 @@ RatGene(
     addition=None,
     backend="scip",
     integerTolerance=None,
+    target_type="auto",
+    return_changelog=False,
+    changelog=None,
+    change_log_file=None,
 )
 ```
 
@@ -269,6 +320,10 @@ RatGene(
 | `addition` | `None` | 删除/添加问题中提供添加信息的模型 |
 | `backend` | `"scip"` | LP/MILP 求解后端：`"scip"`、`"cplex"` 或 `"gurobi"` |
 | `integerTolerance` | `None` | MILP 整数容差；`None` 表示使用各后端的最小值 |
+| `target_type` | `"auto"` | 目标出口：`"auto"`（优先 `EX_` 分泌出口，其次 `DM_` 需求反应）、`"secretion"` 或 `"demand"` |
+| `return_changelog` | `False` | 将 `ChangeLog` 追加到返回值末尾 |
+| `changelog` | `None` | 可选的 `ChangeLog` 或列表，用于接收日志条目 |
+| `change_log_file` | `None` | 将日志写入 `.json`、`.csv` 或文本文件 |
 
 ### 返回值
 
@@ -280,6 +335,11 @@ RatGene(
   `(x_target, knockouts)`
 - `type=0`，有添加模型：
   `(x_target, deletions, additions)`
+
+当 `return_changelog=True` 时，返回值最后会追加一个 `ChangeLog`。日志是由
+字典式条目组成的列表，包含 `reaction_id`、`formula`、`compartment`、
+`old_bounds`、`new_bounds` 和 `reason`，以及 `change_type`、`role`、
+`introduced` 和 `genes` 等细节。`ChangeLog.metadata` 保存所选目标出口的信息。
 
 `x_target` 表示应用策略后的目标交换反应速率。基因策略向量中，`1` 表示基因保留/活跃，`0` 表示基因被删除；添加策略中，`1` 表示基因被添加。
 
@@ -345,14 +405,27 @@ Model.load_mat(filename)     # 从 .mat 文件读取
 from ratgenepy import uniteGeneModel, introExchange
 
 united = uniteGeneModel(core_model, addition_model)
-new_model, id_target, TMPR = introExchange(
+new_model, id_target, TMPR, info = introExchange(
     united, id_biomass, [id_carbon, id_oxygen], id_target_met,
     backend="scip",
+    target_type="auto",   # "auto"、"secretion" 或 "demand"
+    return_info=True,
 )
+print(info["kind"], info["role"])  # "secretion"/"secretion_outlet"
 ```
 
 - `uniteGeneModel(model1, model2)`：整合两个模型及其基因/反应关系。
-- `introExchange(...)`：查找已有的 `EX_<met>` 或 `DM_<met>` 反应；如果不存在，则添加名为 `EX_target` 的目标交换反应。
+- `introExchange(...)`：查找已有的分泌出口（`EX_<met>`）、已有的胞内需求反应
+  （`DM_<met>`），或添加虚拟目标反应。`target_type` 显式指定选择方式：
+  - `"auto"`：优先 `EX_`（分泌出口），其次 `DM_`（胞内需求），都没有时创建
+    `EX_target`；
+  - `"secretion"`：只接受 `EX_` 出口，否则创建 `EX_target`；
+  - `"demand"`：只接受 `DM_` 反应，否则创建 `DM_target`。
+- 若已有出口被封闭（上界 `<= 0`），会重新开放以允许正向生产通量，该边界
+  修改会写入变更日志。若 `EX_target`/`DM_target` 已被占用，新标识符会追加
+  数字后缀。
+- `info` 报告所选反应、`kind`/`role`、区室、边界、是新增还是被开放，以及
+  两种出口是否同时存在。
 - `TMPR`：目标代谢物的理论最大生产速率。
 
 ### 比率搜索
@@ -623,7 +696,7 @@ Reduced addition genes:
 
 ## 算法流程
 
-1. **目标交换反应设置**：`introExchange` 查找或创建目标交换反应，并计算理论最大生产速率。
+1. **目标交换反应设置**：`introExchange` 显式区分分泌出口（`EX_`）与胞内需求反应（`DM_`），查找或创建目标出口，并计算理论最大生产速率。
 2. **GPR 矩阵构建**：`maxParseGPR` 和 `constructMatrix` 将基因-蛋白-反应规则转换为线性布尔约束。
 3. **基于比率的 MILP 搜索**：`ratioGene` 或 `ratioMethod` 逐步提高目标/生物量比率并求解 MILP，直到找到通过验证的策略。
 4. **验证**：通过最大化生物量并确认目标生产来验证候选策略（`verifyGeneKnock`、`verifyKnock`）。
@@ -640,6 +713,7 @@ ratgenepy/
 ├── __main__.py         # python -m ratgenepy
 ├── _utils.py           # MATLAB 数据转换、矩阵与索引辅助函数
 ├── model.py            # Model 容器与 .mat 模型加载
+├── changelog.py        # ChangeLog、反应式与区室辅助函数
 ├── solvers/
 │   ├── __init__.py     # 后端分发、solver、pool_solutions
 │   ├── _common.py      # LP/MILP 参数标准化
