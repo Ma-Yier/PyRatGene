@@ -109,6 +109,27 @@ def uniteGeneModel(model1: Model, model2: Model) -> Model:
     universal.metNames = list(model1.metNames) + [model2.metNames[i] for i in diff_mets]
     universal.metFormulas = (list(model1.metFormulas)
                              + [model2.metFormulas[i] for i in diff_mets])
+    if model1.metCompartments and model2.metCompartments:
+        universal.metCompartments = (
+            list(model1.metCompartments)
+            + [model2.metCompartments[i] for i in diff_mets]
+        )
+    else:
+        universal.metCompartments = []
+
+    # Preserve compartment dictionaries when both models provide them.
+    compartments = list(model1.compartments or [])
+    for compartment in (model2.compartments or []):
+        if compartment not in compartments:
+            compartments.append(compartment)
+    universal.compartments = compartments
+    compartment_names = dict(zip(model1.compartments or [],
+                                 model1.compartmentNames or []))
+    compartment_names.update(dict(zip(model2.compartments or [],
+                                      model2.compartmentNames or [])))
+    universal.compartmentNames = [
+        compartment_names.get(c, c) for c in compartments
+    ]
     if model1.metCharge is not None and model2.metCharge is not None:
         universal.metCharge = np.concatenate(
             (model1.metCharge, model2.metCharge[diff_mets])
