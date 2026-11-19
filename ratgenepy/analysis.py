@@ -10,7 +10,8 @@ from .model import Model
 from .solvers import _maximize, _minimize
 
 def boundAnalysis(model: Model, kogene, id_biomass: int, id_target: int,
-                  backend: str = "scip"):
+                  backend: str = "scip", threads: int = 1,
+                  memory: float = float("inf")):
     """Return the worst-case and best-case target rates for a strategy."""
     minTarget = 0.0
     maxTarget = 0.0
@@ -26,7 +27,8 @@ def boundAnalysis(model: Model, kogene, id_biomass: int, id_target: int,
 
     success, _, biomass = _maximize(
         model1.c, model1.S, model1.b, np.zeros((0, model1.S.shape[1])),
-        np.zeros(0), model1.lb, model1.ub, backend=backend
+        np.zeros(0), model1.lb, model1.ub, backend=backend,
+        threads=threads, memory=memory
     )
     if not success:
         return minTarget, maxTarget
@@ -39,14 +41,16 @@ def boundAnalysis(model: Model, kogene, id_biomass: int, id_target: int,
 
     _, _, maxTarget = _maximize(
         model2.c, model2.S, model2.b, np.zeros((0, model2.S.shape[1])),
-        np.zeros(0), model2.lb, model2.ub, backend=backend
+        np.zeros(0), model2.lb, model2.ub, backend=backend,
+        threads=threads, memory=memory
     )
     if maxTarget <= 0.001:
         maxTarget = 0.0
 
     _, _, minTarget = _minimize(
         model2.c, model2.S, model2.b, np.zeros((0, model2.S.shape[1])),
-        np.zeros(0), model2.lb, model2.ub, backend=backend
+        np.zeros(0), model2.lb, model2.ub, backend=backend,
+        threads=threads, memory=memory
     )
     if minTarget <= 0.001:
         minTarget = 0.0

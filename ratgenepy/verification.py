@@ -11,7 +11,8 @@ from .solvers import _maximize
 
 def verifyGeneKnock(model: Model, input_x, indGPR, id_biomass: int,
                     id_target: int, min_bound: float,
-                    backend: str = "scip"):
+                    backend: str = "scip", threads: int = 1,
+                    memory: float = float("inf")):
     """Validate a gene deletion/addition strategy.
 
     Returns ``(x_target, gene_strategy)``.
@@ -30,14 +31,16 @@ def verifyGeneKnock(model: Model, input_x, indGPR, id_biomass: int,
     success, x, value = _maximize(work.c, work.S, work.b,
                                   np.zeros((0, work.S.shape[1])),
                                   np.zeros(0), work.lb, work.ub,
-                                  backend=backend)
+                                  backend=backend, threads=threads,
+                                  memory=memory)
     if success and value >= min_bound:
         return float(x[id_target]), input_xg
     return 0.0, input_xg
 
 
 def verifyKnock(model: Model, input_x, id_biomass: int, id_target: int,
-                min_bound: float, backend: str = "scip"):
+                min_bound: float, backend: str = "scip", threads: int = 1,
+                memory: float = float("inf")):
     """Validate a reaction deletion/addition strategy.
 
     Returns ``(x_target, knockout)``.
@@ -56,7 +59,8 @@ def verifyKnock(model: Model, input_x, id_biomass: int, id_target: int,
     success, x, value = _maximize(work.c, work.S, work.b,
                                   np.zeros((0, work.S.shape[1])),
                                   np.zeros(0), work.lb, work.ub,
-                                  backend=backend)
+                                  backend=backend, threads=threads,
+                                  memory=memory)
     if success and value > min_bound:
         return float(x[id_target]), knockout
     return 0.0, knockout

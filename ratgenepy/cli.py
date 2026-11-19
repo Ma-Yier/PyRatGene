@@ -6,6 +6,7 @@ import argparse
 import os
 from typing import Optional, Sequence
 
+from ._resources import normalize_memory, normalize_threads
 from .core import RatGene
 from .model import Model
 
@@ -102,6 +103,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help=("MILP integrality tolerance (default: the smallest value "
               "supported by the selected backend)")
     )
+    parser.add_argument(
+        "--threads", "--numThreads", dest="threads",
+        type=normalize_threads, default=1,
+        help="maximum number of solver threads (default: 1)"
+    )
+    parser.add_argument(
+        "--memory", "--memoryLimit", "--memory-limit", dest="memory",
+        type=normalize_memory, default=float("inf"),
+        help=("total solver memory limit in MB, e.g. 2048 or 2G "
+              "(default: infinity, no limit)")
+    )
 
     args = parser.parse_args(argv)
 
@@ -129,6 +141,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         backend=args.backend,
         integerTolerance=args.integerTolerance,
         target_type=args.target_type,
+        threads=args.threads,
+        memory=args.memory,
         return_changelog=True,
         change_log_file=args.change_log,
     )

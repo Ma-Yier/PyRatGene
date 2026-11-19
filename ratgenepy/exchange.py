@@ -143,7 +143,8 @@ def _open_outlet(model: Model, index: int, change_log: Optional[ChangeLog],
 def introExchange(input_model: Model, id_biomass: int, id_input: Sequence[int],
                   id_met: int, backend: str = "scip",
                   target_type: str = "auto", return_info: bool = False,
-                  change_log: Optional[ChangeLog] = None):
+                  change_log: Optional[ChangeLog] = None,
+                  threads: int = 1, memory: float = float("inf")):
     """Detect or add a target production outlet.
 
     Parameters
@@ -272,7 +273,8 @@ def introExchange(input_model: Model, id_biomass: int, id_input: Sequence[int],
     success, x, _ = _maximize(model.c, model.S, model.b,
                               np.zeros((0, model.S.shape[1])),
                               np.zeros(0), model.lb, model.ub,
-                              backend=backend)
+                              backend=backend, threads=threads,
+                              memory=memory)
     if not success:
         model.c[id_biomass] = 1
         model.c[id_target] = 0

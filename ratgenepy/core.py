@@ -192,7 +192,7 @@ def RatGene(model, targetMet, biomass=None, carbon="EX_glc__D_e",
             type=1, size=1, addition=None, backend="scip",
             integerTolerance=None, target_type="auto",
             return_changelog=False, changelog=None, change_log_file=None,
-            **kwargs):
+            threads=1, memory=float("inf"), **kwargs):
     """Ratio-based gene/reaction modification strategy search.
 
     Parameters follow ``RatGene.m``.  ``type`` is 1 for genes and 0 for
@@ -205,6 +205,11 @@ def RatGene(model, targetMet, biomass=None, carbon="EX_glc__D_e",
     ``target_type`` selects the target production outlet explicitly:
     ``"auto"`` (prefer a secretion outlet ``EX_``, then an intracellular
     demand ``DM_``), ``"secretion"`` or ``"demand"``.
+
+    ``threads`` limits the number of solver threads (default ``1``) and
+    ``memory`` limits total solver memory in MB (default ``inf``, meaning no
+    limit).  The same limits are forwarded to the ratio search, candidate
+    verification and strategy reduction.
 
     A change log is always generated.  Pass ``return_changelog=True`` to
     append it to the returned tuple, ``changelog=[]`` to fill an external
@@ -332,19 +337,21 @@ def RatGene(model, targetMet, biomass=None, carbon="EX_glc__D_e",
         new_model, id_target, TMPR, target_info = introExchange(
             model1, id_biomass, [id_carbon, id_oxygen], metID,
             backend=backend, target_type=target_type, return_info=True,
-            change_log=log,
+            change_log=log, threads=threads, memory=memory,
         )
         log.metadata["target"] = dict(target_info)
         if TMPR <= 0:
             raise ValueError("theoretical maximum production rate is not positive")
 
-        opt = optimizeCbModel(model1, backend=backend)
+        opt = optimizeCbModel(model1, backend=backend, threads=threads,
+                              memory=memory)
         TMGR = opt.f
 
         x_target, _, knockout = ratioGene(
             new_model, id_biomass, id_target, TMGR, maxLoop,
             TMPR / (maxLoop * LBbiomass), pool, timeLimit,
-            backend=backend, integerTolerance=integerTolerance
+            backend=backend, integerTolerance=integerTolerance,
+            threads=threads, memory=memory
         )
 
         if np.asarray(knockout).size == 0:
@@ -359,7 +366,8 @@ def RatGene(model, targetMet, biomass=None, carbon="EX_glc__D_e",
                      if addition_problem else [0, 0])
             _, _, newKnockout = rmRedundancy(
                 new_model, knockout, id_target, id_biomass, split,
-                backend=backend, integerTolerance=integerTolerance
+                backend=backend, integerTolerance=integerTolerance,
+                threads=threads, memory=memory
             )
 
         # Log the reaction-level consequences of the final gene strategy.
@@ -417,7 +425,7 @@ def RatGene(model, targetMet, biomass=None, carbon="EX_glc__D_e",
     x_target, _, newKnockout = ratioMethod(
         new_model, id_biomass, id_target, maxLoop,
         TMPR / (maxLoop * LBbiomass), timeLimit,
-        backend=backend
+        backend=backend, threads=threads, memory=memory
     )
     newKnockout = np.asarray(newKnockout)
 

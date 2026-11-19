@@ -6,6 +6,12 @@ from typing import Any, Dict
 
 import numpy as np
 
+from .._resources import (
+    DEFAULT_MEMORY,
+    DEFAULT_THREADS,
+    normalize_memory,
+    normalize_threads,
+)
 from .._utils import _as_vec, _normalize_vtype
 
 
@@ -97,6 +103,15 @@ def normalize_problem(objfunc, kwargs) -> Dict[str, Any]:
         if not np.isfinite(integer_tolerance) or integer_tolerance < 0:
             raise ValueError("integerTolerance must be a finite non-negative value")
 
+    threads = kwargs.get(
+        "threads",
+        kwargs.get("numThreads", kwargs.get("num_threads", DEFAULT_THREADS)),
+    )
+    memory = kwargs.get(
+        "memory",
+        kwargs.get("memoryLimit", kwargs.get("memory_limit", DEFAULT_MEMORY)),
+    )
+
     return {
         "obj": objective,
         "Aeq": Aeq,
@@ -110,4 +125,7 @@ def normalize_problem(objfunc, kwargs) -> Dict[str, Any]:
         "timeLimit": kwargs.get("timeLimit"),
         "pool": max(0, int(kwargs.get("pool", 0) or 0)),
         "integerTolerance": integer_tolerance,
+        # Memory is expressed in MB; infinity means "no limit".
+        "threads": normalize_threads(threads),
+        "memory": normalize_memory(memory),
     }

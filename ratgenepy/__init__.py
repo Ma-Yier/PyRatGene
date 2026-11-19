@@ -21,7 +21,7 @@ from .exchange import introExchange
 from .gpr import constructMatrix, locateGene, maxParseGPR, verifyRatioGene
 from .integrate import findDiffGene, uniteGeneModel
 from .model import Model
-from .ratio import RatMethodRxn, ratioGene, ratioMethod, verifyRxn
+from .ratio import RatMethodRxn, ratioGene, ratioGenePar, ratioMethod, verifyRxn
 from .reduction import rmRedundancy
 from .solvers import (
     available_solvers,
@@ -57,6 +57,7 @@ __all__ = [
     "optimizeCbModel",
     "pool_solutions",
     "ratioGene",
+    "ratioGenePar",
     "ratioMethod",
     "reaction_compartment",
     "reaction_formula",

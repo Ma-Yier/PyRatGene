@@ -35,6 +35,30 @@ def _bound(cplex, value: float) -> float:
     return float(value)
 
 
+def _set_parameter(cpx, path: str, value) -> None:
+    """Set a dotted CPLEX parameter path, ignoring unsupported parameters."""
+    try:
+        target = cpx.parameters
+        parts = path.split(".")
+        for part in parts[:-1]:
+            target = getattr(target, part)
+        getattr(target, parts[-1]).set(value)
+    except Exception:
+        pass
+
+
+def _apply_resource_limits(cpx, threads: int, memory: float) -> None:
+    _set_parameter(cpx, "threads", int(threads))
+
+    if not np.isfinite(memory):
+        return
+    memory_mb = float(memory)
+    # CPLEX expresses memory limits in MB.  treememory controls the
+    # branch-and-cut tree, workmem controls the solver workspace.
+    _set_parameter(cpx, "mip.limits.treememory", memory_mb)
+    _set_parameter(cpx, "workmem", memory_mb)
+
+
 def _add_constraints(cpx, cplex, matrix: np.ndarray, rhs: np.ndarray,
                      sense: str) -> None:
     lin_expr = []
@@ -107,13 +131,15 @@ def _pool_values(cpx) -> List[np.ndarray]:
     return [values[int(i)] for i in order]
 
 
-def cplex_solver(objfunc, **kwargs):
+def cplex_solver(objfunc, threads=1, memory=float("inf"), **kwargs):
     """Solve an LP or MILP with CPLEX.
 
     Returns ``(cplex_model, x)``.  See
     :func:`ratgenepy.solvers.solver` for the accepted keyword arguments.
     """
     cplex = _require_cplex()
+    kwargs["threads"] = threads
+    kwargs["memory"] = memory
     problem = normalize_problem(objfunc, kwargs)
 
     cpx = cplex.Cplex()
@@ -125,6 +151,7 @@ def cplex_solver(objfunc, **kwargs):
         pass
 
     cpx.objective.set_sense(cpx.objective.sense.minimize)
+    _apply_resource_limits(cpx, problem["threads"], problem["memory"])
 
     if problem["opt"] == "milp":
         cpx.parameters.mip.tolerances.integrality.set(

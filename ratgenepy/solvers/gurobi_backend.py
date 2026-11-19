@@ -50,17 +50,23 @@ def _add_constraints(model, gp, variables, matrix: np.ndarray,
             model.addConstr(expr <= float(rhs[i]), name=f"ineq_{i}")
 
 
-def gurobi_solver(objfunc, **kwargs):
+def gurobi_solver(objfunc, threads=1, memory=float("inf"), **kwargs):
     """Solve an LP or MILP with Gurobi.
 
     Returns ``(gurobi_model, x)``.  See
     :func:`ratgenepy.solvers.solver` for the accepted keyword arguments.
     """
     gp, GRB = _require_gurobi()
+    kwargs["threads"] = threads
+    kwargs["memory"] = memory
     problem = normalize_problem(objfunc, kwargs)
 
     model = gp.Model()
     model.Params.OutputFlag = 0
+    model.Params.Threads = int(problem["threads"])
+    if np.isfinite(problem["memory"]):
+        # Gurobi expresses its memory limit in GB; the public API uses MB.
+        model.Params.MemLimit = float(problem["memory"]) / 1024.0
 
     if problem["opt"] == "milp":
         model.Params.IntFeasTol = resolve_integer_tolerance(problem, "gurobi")

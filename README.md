@@ -26,6 +26,8 @@ installed. The original MATLAB implementation uses CPLEX.
 - Target exchange detection or automatic introduction
 - MILP solution-pool based candidate verification
 - Pluggable LP/MILP backends: SCIP (default), CPLEX, and Gurobi
+- Solver thread-count and total-memory limits (default: 1 thread, no memory limit)
+- `ratioGenePar()` for process-wide thread pinning and OS-enforced memory limits
 - Explicit distinction between secretion outlets (`EX_`) and intracellular demands (`DM_`)
 - Per-run change log with reaction IDs, formulas, compartments, old/new bounds, and reasons
 - Two-step reduction of gene strategy size
@@ -277,6 +279,8 @@ The CLI also accepts:
 --targetType auto|secretion|demand
 --changeLog FILE               (.json, .csv or text)
 --integerTolerance VALUE
+--threads N                    (default: 1)
+--memory MB|2G                 (default: infinity, no limit)
 ```
 
 The original single-file entry point remains available:
@@ -319,6 +323,8 @@ RatGene(
     return_changelog=False,
     changelog=None,
     change_log_file=None,
+    threads=1,
+    memory=float("inf"),
 )
 ```
 
@@ -344,6 +350,8 @@ RatGene(
 | `return_changelog` | `False` | Append the `ChangeLog` to the returned tuple |
 | `changelog` | `None` | Optional `ChangeLog` or list to fill with entries |
 | `change_log_file` | `None` | Write the log to `.json`, `.csv`, or a text file |
+| `threads` | `1` | Maximum number of threads used by the solver |
+| `memory` | `inf` | Total solver memory limit in MB; `inf` means no limit |
 
 ### Output
 
@@ -460,7 +468,7 @@ print(info["kind"], info["role"])  # "secretion"/"secretion_outlet"
 ### Ratio-based search
 
 ```python
-from ratgenepy import ratioGene, ratioMethod
+from ratgenepy import ratioGene, ratioGenePar, ratioMethod
 
 x_target, alpha, knockout = ratioGene(
     model,
@@ -472,6 +480,8 @@ x_target, alpha, knockout = ratioGene(
     numMultiStrat,
     timeLimit,
     backend="scip",   # or "cplex" / "gurobi"
+    threads=1,        # solver thread limit
+    memory=float("inf"),  # total solver memory limit in MB
 )
 
 x_target, alpha, knockout = ratioMethod(
@@ -482,10 +492,33 @@ x_target, alpha, knockout = ratioMethod(
     gap,
     timeLimit,
     backend="scip",
+    threads=1,
+    memory=float("inf"),
+)
+
+# Same signature as ratioGene, but also pins NumPy/SciPy thread pools and
+# applies an OS-level memory limit for the duration of the call.
+x_target, alpha, knockout = ratioGenePar(
+    model,
+    id_biomass,
+    id_target,
+    TMGR,
+    max_loop,
+    gap,
+    numMultiStrat,
+    timeLimit,
+    backend="scip",
+    threads=1,
+    memory=4096,      # 4 GB; use float("inf") for no hard limit
 )
 ```
 
 - `ratioGene` handles gene-level strategies.
+- `ratioGenePar` has exactly the same parameters as `ratioGene`. It pins
+  common BLAS/OpenMP/NumExpr environment variables (and, when available,
+  `threadpoolctl` thread pools) to `threads`, then applies
+  `resource.RLIMIT_AS` on POSIX or a Windows Job Object memory limit when
+  `memory` is finite.
 - `ratioMethod` handles reaction-level strategies.
 - `alpha` is the final target/biomass ratio used by the search.
 - `knockout` is the strategy vector.
@@ -580,6 +613,8 @@ handle, x = solver(
     pool=10,           # keep up to 10 MILP candidates
     timeLimit=60,
     integerTolerance=None,  # None = backend minimum; 1e-9 also valid
+    threads=1,          # maximum solver threads
+    memory=float("inf"),  # total solver memory limit in MB
 )
 
 # Backend-specific entry points are also available:
@@ -611,6 +646,15 @@ it is omitted, each backend is set to its minimum supported value:
 Pass `integerTolerance=1e-9` explicitly to use the MATLAB
 `OPTIONS.IntegerTolerance` value on all three backends. Very tight tolerances
 can increase runtime and expose numerical difficulties.
+
+`threads` (default `1`) and `memory` (default `inf`, in MB) are mapped to each
+backend as follows:
+
+| Backend | Thread parameter | Memory parameter |
+|---|---|---|
+| SCIP | `parallel/maxnthreads` | `limits/memory` (MB) |
+| CPLEX | `threads` | `mip.limits.treememory` and `workmem` (MB) |
+| Gurobi | `Threads` | `MemLimit` (converted from MB to GB) |
 
 Installing `gurobipy` or the CPLEX Python API is optional. If a selected
 backend is unavailable, `solver` raises an informative `ImportError`.
@@ -765,6 +809,7 @@ ratgenepy/
 ├── __init__.py         # public API and version
 ├── __main__.py         # python -m ratgenepy
 ├── _utils.py           # MATLAB conversion, matrix and indexing helpers
+├── _resources.py       # thread pinning and OS-level memory limits
 ├── model.py            # Model container and .mat loading
 ├── changelog.py        # ChangeLog entries, formulas and compartment helpers
 ├── solvers/
@@ -778,7 +823,7 @@ ratgenepy/
 ├── verification.py     # verifyGeneKnock, verifyKnock
 ├── exchange.py         # introExchange
 ├── candidates.py       # candidate deletion/addition sets
-├── ratio.py            # ratioGene, ratioMethod, compatibility wrappers
+├── ratio.py            # ratioGene, ratioGenePar, ratioMethod, wrappers
 ├── reduction.py        # rmRedundancy and strategy reduction
 ├── integrate.py        # findDiffGene, uniteGeneModel
 ├── analysis.py         # boundAnalysis

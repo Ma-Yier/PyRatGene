@@ -26,7 +26,8 @@ def _require_scip():
 
 def _make_problem(objfunc, Aeq, beq, A, b, lb, ub, vtype,
                   timeLimit=None, pool=None,
-                  integerTolerance=None) -> Tuple[Any, list]:
+                  integerTolerance=None, threads=None,
+                  memory=None) -> Tuple[Any, list]:
     ScipModel, quicksum = _require_scip()
     n = len(lb)
     scip = ScipModel()
@@ -35,6 +36,23 @@ def _make_problem(objfunc, Aeq, beq, A, b, lb, ub, vtype,
         # SCIP has no separate integrality tolerance; numerics/feastol is
         # the closest equivalent and controls integrality feasibility.
         scip.setParam("numerics/feastol", float(integerTolerance))
+
+    if threads is not None:
+        # SCIP uses "parallel/maxnthreads" (and minnthreads) for its
+        # branch-and-bound/LP parallelism.
+        try:
+            scip.setParam("parallel/maxnthreads", int(threads))
+            if int(threads) == 1:
+                scip.setParam("parallel/minnthreads", 1)
+        except Exception:
+            pass
+
+    if memory is not None and np.isfinite(memory):
+        # SCIP's memory limit is expressed in MB.
+        try:
+            scip.setParam("limits/memory", float(memory))
+        except Exception:
+            pass
 
     variables = []
     for i in range(n):
@@ -80,12 +98,14 @@ def _solution_vector(scip, variables, sol) -> np.ndarray:
     return np.array([scip.getSolVal(sol, var) for var in variables], dtype=float)
 
 
-def scip_solver(objfunc, **kwargs):
+def scip_solver(objfunc, threads=1, memory=float("inf"), **kwargs):
     """Solve an LP or MILP with SCIP.
 
     Returns ``(scip_model, x)``.  See :func:`ratgenepy.solvers.solver` for the
     accepted keyword arguments.
     """
+    kwargs["threads"] = threads
+    kwargs["memory"] = memory
     problem = normalize_problem(objfunc, kwargs)
     integer_tolerance = (
         resolve_integer_tolerance(problem, "scip")
@@ -100,6 +120,8 @@ def scip_solver(objfunc, **kwargs):
         timeLimit=problem["timeLimit"],
         pool=problem["pool"],
         integerTolerance=integer_tolerance,
+        threads=problem["threads"],
+        memory=problem["memory"],
     )
     scip.optimize()
 

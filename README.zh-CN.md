@@ -18,6 +18,8 @@ RatGene 用于搜索能够将目标代谢物生产与细胞生长偶联起来的
 - 目标交换反应检测或自动添加
 - 基于 MILP 解池的候选策略验证
 - 可切换的 LP/MILP 求解后端：SCIP（默认）、CPLEX 和 Gurobi
+- 求解器线程数与总内存上限（默认：1 个线程、不限制内存）
+- `ratioGenePar()`：进程级线程锁定与操作系统级内存限制
 - 显式区分分泌出口（`EX_`）与胞内需求反应（`DM_`）
 - 每次运行生成变更日志（反应 ID、反应式、区室、旧/新边界和原因）
 - 两步式基因策略规模缩减
@@ -257,6 +259,8 @@ ratgene core.mat TARGET_MET_ID \
 --targetType auto|secretion|demand
 --changeLog FILE               （.json、.csv 或文本）
 --integerTolerance VALUE
+--threads N                    （默认：1）
+--memory MB|2G                 （默认：infinity，不限制）
 ```
 
 原有的单文件入口仍然可用：
@@ -299,6 +303,8 @@ RatGene(
     return_changelog=False,
     changelog=None,
     change_log_file=None,
+    threads=1,
+    memory=float("inf"),
 )
 ```
 
@@ -324,6 +330,8 @@ RatGene(
 | `return_changelog` | `False` | 将 `ChangeLog` 追加到返回值末尾 |
 | `changelog` | `None` | 可选的 `ChangeLog` 或列表，用于接收日志条目 |
 | `change_log_file` | `None` | 将日志写入 `.json`、`.csv` 或文本文件 |
+| `threads` | `1` | 求解器使用的最大线程数 |
+| `memory` | `inf` | 求解器总内存上限（MB）；`inf` 表示不限制 |
 
 ### 返回值
 
@@ -431,7 +439,7 @@ print(info["kind"], info["role"])  # "secretion"/"secretion_outlet"
 ### 比率搜索
 
 ```python
-from ratgenepy import ratioGene, ratioMethod
+from ratgenepy import ratioGene, ratioGenePar, ratioMethod
 
 x_target, alpha, knockout = ratioGene(
     model,
@@ -443,6 +451,8 @@ x_target, alpha, knockout = ratioGene(
     numMultiStrat,
     timeLimit,
     backend="scip",   # 或 "cplex" / "gurobi"
+    threads=1,        # 求解器线程上限
+    memory=float("inf"),  # 求解器总内存上限（MB）
 )
 
 x_target, alpha, knockout = ratioMethod(
@@ -453,10 +463,32 @@ x_target, alpha, knockout = ratioMethod(
     gap,
     timeLimit,
     backend="scip",
+    threads=1,
+    memory=float("inf"),
+)
+
+# 参数与 ratioGene 完全一致，但会同时锁定 NumPy/SciPy 的线程池，
+# 并在调用期间施加操作系统级内存上限。
+x_target, alpha, knockout = ratioGenePar(
+    model,
+    id_biomass,
+    id_target,
+    TMGR,
+    max_loop,
+    gap,
+    numMultiStrat,
+    timeLimit,
+    backend="scip",
+    threads=1,
+    memory=4096,      # 4 GB；使用 float("inf") 表示不施加硬限制
 )
 ```
 
 - `ratioGene`：处理基因层级策略。
+- `ratioGenePar`：参数与 `ratioGene` 完全一致。函数开始时会锁定
+  BLAS/OpenMP/NumExpr 环境变量（若安装了 `threadpoolctl`，也会限制已加载
+  的本地线程池），并在 `memory` 有限时通过 POSIX 的
+  `resource.RLIMIT_AS` 或 Windows Job Object 施加进程级内存限制。
 - `ratioMethod`：处理反应层级策略。
 - `alpha`：搜索结束时使用的目标/生物量比率。
 - `knockout`：策略向量。
@@ -548,6 +580,8 @@ handle, x = solver(
     pool=10,           # 保留最多 10 个 MILP 候选解
     timeLimit=60,
     integerTolerance=None,  # None = 后端最小值；1e-9 也可用
+    threads=1,          # 求解器最大线程数
+    memory=float("inf"),  # 求解器总内存上限（MB）
 )
 
 # 也可以直接调用特定后端：
@@ -572,6 +606,14 @@ candidates = pool_solutions(handle, limit=10)
 | Gurobi | `IntFeasTol` | `1e-9` |
 
 如果要统一使用 MATLAB 的 `OPTIONS.IntegerTolerance` 值，可以显式传入 `integerTolerance=1e-9`。容差过小可能增加运行时间，并放大数值问题。
+
+`threads`（默认 `1`）和 `memory`（默认 `inf`，单位 MB）会按如下方式映射到各后端：
+
+| 后端 | 线程参数 | 内存参数 |
+|---|---|---|
+| SCIP | `parallel/maxnthreads` | `limits/memory`（MB） |
+| CPLEX | `threads` | `mip.limits.treememory` 与 `workmem`（MB） |
+| Gurobi | `Threads` | `MemLimit`（由 MB 转换为 GB） |
 
 `gurobipy` 和 CPLEX Python API 都是可选依赖。如果选择的后端不可用，`solver` 会抛出带有说明的 `ImportError`。
 
@@ -712,6 +754,7 @@ ratgenepy/
 ├── __init__.py         # 公共 API 与版本号
 ├── __main__.py         # python -m ratgenepy
 ├── _utils.py           # MATLAB 数据转换、矩阵与索引辅助函数
+├── _resources.py       # 线程锁定与操作系统级内存限制
 ├── model.py            # Model 容器与 .mat 模型加载
 ├── changelog.py        # ChangeLog、反应式与区室辅助函数
 ├── solvers/
@@ -725,7 +768,7 @@ ratgenepy/
 ├── verification.py     # verifyGeneKnock、verifyKnock
 ├── exchange.py         # introExchange
 ├── candidates.py       # 候选删除/添加集合
-├── ratio.py            # ratioGene、ratioMethod、兼容包装函数
+├── ratio.py            # ratioGene、ratioGenePar、ratioMethod、兼容包装函数
 ├── reduction.py        # rmRedundancy 与策略缩减
 ├── integrate.py        # findDiffGene、uniteGeneModel
 ├── analysis.py         # boundAnalysis

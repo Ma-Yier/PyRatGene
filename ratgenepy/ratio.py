@@ -6,6 +6,7 @@ import time
 
 import numpy as np
 
+from ._resources import parallel_limits
 from .gpr import constructMatrix
 from .model import Model
 from .solvers import pool_solutions, solver
@@ -14,8 +15,14 @@ from .verification import verifyGeneKnock, verifyKnock
 def ratioGene(model: Model, id_biomass: int, id_target: int, TMGR: float,
               max_loop: int, gap: float, numMultiStrat: int,
               timeLimit: float, backend: str = "scip",
-              integerTolerance=None):
-    """Gene deletion or deletion/addition strategy search (ratioGene.m)."""
+              integerTolerance=None, threads: int = 1,
+              memory: float = float("inf")):
+    """Gene deletion or deletion/addition strategy search (ratioGene.m).
+
+    ``threads`` limits the number of solver threads (default ``1``) and
+    ``memory`` limits the total solver memory in MB (default ``inf``, meaning
+    no limit).
+    """
     (lessMatrixLeft, lessMatrixRight, equalMatrixLeft, equalMatrixRight,
      nGpr, nAux, nGen, indGPR) = constructMatrix(model)
 
@@ -61,6 +68,7 @@ def ratioGene(model: Model, id_biomass: int, id_target: int, TMGR: float,
             opt="milp", vtype=vtype, timeLimit=milpTime,
             pool=numMultiStrat, backend=backend,
             integerTolerance=integerTolerance,
+            threads=threads, memory=memory,
         )
 
         if best is not None:
@@ -77,7 +85,8 @@ def ratioGene(model: Model, id_biomass: int, id_target: int, TMGR: float,
                 gene_values = solution[gene_offset:gene_offset + nGen]
                 x_target, knockout_gene = verifyGeneKnock(
                     model, gene_values, indGPR, id_biomass, id_target,
-                    model.lb[id_biomass], backend=backend
+                    model.lb[id_biomass], backend=backend,
+                    threads=threads, memory=memory,
                 )
                 if x_target > 0:
                     return x_target, alpha, knockout_gene
@@ -89,9 +98,37 @@ def ratioGene(model: Model, id_biomass: int, id_target: int, TMGR: float,
     return x_target, alpha, knockout
 
 
+def ratioGenePar(model: Model, id_biomass: int, id_target: int, TMGR: float,
+                 max_loop: int, gap: float, numMultiStrat: int,
+                 timeLimit: float, backend: str = "scip",
+                 integerTolerance=None, threads: int = 1,
+                 memory: float = float("inf")):
+    """Parallel-resource-safe version of :func:`ratioGene`.
+
+    The signature is identical to :func:`ratioGene`.  Before running the
+    algorithm, common BLAS/OpenMP/NumExpr environment variables are pinned to
+    ``threads`` so that NumPy/SciPy matrix operations do not use all available
+    cores.  When ``memory`` is finite, an operating-system-level limit is
+    applied for the duration of the call: ``resource.RLIMIT_AS`` on POSIX and
+    a Job Object process-memory limit on Windows.  Solver-level limits are
+    also passed to the selected backend.
+
+    ``memory`` is expressed in megabytes; the default ``inf`` disables the
+    hard limit.
+    """
+    with parallel_limits(threads=threads, memory=memory):
+        return ratioGene(
+            model, id_biomass, id_target, TMGR, max_loop, gap,
+            numMultiStrat, timeLimit, backend=backend,
+            integerTolerance=integerTolerance, threads=threads,
+            memory=memory,
+        )
+
+
 def ratioMethod(model: Model, id_biomass: int, id_target: int,
                 max_loop: int, gap: float, timeLimit: float,
-                backend: str = "scip"):
+                backend: str = "scip", threads: int = 1,
+                memory: float = float("inf")):
     """Reaction deletion or deletion/addition strategy search (ratioMethod.m)."""
     alpha = 0.0
     m, n = model.S.shape
@@ -121,12 +158,13 @@ def ratioMethod(model: Model, id_biomass: int, id_target: int,
             break
 
         _, x = solver(c, A=A, b=b, Aeq=Aeq, beq=beq, lb=lb, ub=ub,
-                      opt="lp", timeLimit=remaining, backend=backend)
+                      opt="lp", timeLimit=remaining, backend=backend,
+                      threads=threads, memory=memory)
 
         if x is not None and x.size == 2 * n:
             x_target, tknockout = verifyKnock(
                 model, x[:n], id_biomass, id_target, model.lb[id_biomass],
-                backend=backend
+                backend=backend, threads=threads, memory=memory
             )
             if x_target > 0:
                 knockout = tknockout
@@ -141,23 +179,27 @@ def ratioMethod(model: Model, id_biomass: int, id_target: int,
 
 
 def RatMethodRxn(model: Model, biomassID: int, targetID: int, maxLoop: int,
-                 gap: float, timeLimit: float, backend: str = "scip"):
+                 gap: float, timeLimit: float, backend: str = "scip",
+                 threads: int = 1, memory: float = float("inf")):
     """Compatibility wrapper for the reaction-level ratio method.
 
     Returns ``(x_target, knockout, alpha)`` as in the original Python draft.
     """
     x_target, alpha, knockout = ratioMethod(
-        model, biomassID, targetID, maxLoop, gap, timeLimit, backend=backend
+        model, biomassID, targetID, maxLoop, gap, timeLimit,
+        backend=backend, threads=threads, memory=memory
     )
     return x_target, knockout, alpha
 
 
 def verifyRxn(model: Model, knot, biomassID: int, targeID: int,
-              LBbiomass: float, backend: str = "scip"):
+              LBbiomass: float, backend: str = "scip", threads: int = 1,
+              memory: float = float("inf")):
     """Compatibility wrapper around :func:`verifyKnock`.
 
     Returns ``(x_target, deleted_reactions)``.
     """
     x_target, knockout = verifyKnock(model, knot, biomassID, targeID,
-                                     LBbiomass, backend=backend)
+                                     LBbiomass, backend=backend,
+                                     threads=threads, memory=memory)
     return x_target, np.where(np.asarray(knockout) == 0)[0]

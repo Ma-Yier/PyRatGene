@@ -51,7 +51,7 @@ def available_solvers() -> List[str]:
     return available
 
 
-def solver(objfunc, backend="scip", **kwargs):
+def solver(objfunc, backend="scip", threads=1, memory=float("inf"), **kwargs):
     """Solve an LP or MILP problem.
 
     Parameters
@@ -73,6 +73,9 @@ def solver(objfunc, backend="scip", **kwargs):
             SCIP ``numerics/feastol`` = ``1e-17``, CPLEX
             ``mip.tolerances.integrality`` = ``0.0``, Gurobi
             ``IntFeasTol`` = ``1e-9``.
+        ``threads``: maximum number of solver threads (default ``1``)
+        ``memory``: total solver memory limit in MB (default ``inf``,
+            meaning no limit)
 
     Returns
     -------
@@ -86,6 +89,8 @@ def solver(objfunc, backend="scip", **kwargs):
             f"unknown solver backend {backend!r}; choose from "
             f"{', '.join(sorted(_BACKENDS))}"
         )
+    kwargs["threads"] = threads
+    kwargs["memory"] = memory
     return _BACKENDS[key](objfunc, **kwargs)
 
 
@@ -111,33 +116,36 @@ def pool_solutions(handle, limit: int = 10) -> List[np.ndarray]:
     raise TypeError(f"unsupported solver handle: {type(handle)!r}")
 
 
-def _maximize(c, Aeq, beq, A, b, lb, ub, timeLimit=None, backend="scip"):
+def _maximize(c, Aeq, beq, A, b, lb, ub, timeLimit=None, backend="scip",
+              threads=1, memory=float("inf")):
     """Maximize c*x; return ``(success, x, objective)``."""
     _, x = solver(
         -np.asarray(c, dtype=float).ravel(),
         backend=backend,
         Aeq=Aeq, beq=beq, A=A, b=b, lb=lb, ub=ub,
-        opt="lp", timeLimit=timeLimit,
+        opt="lp", timeLimit=timeLimit, threads=threads, memory=memory,
     )
     if x is None:
         return False, None, 0.0
     return True, x, float(np.dot(np.asarray(c).ravel(), x))
 
 
-def _minimize(c, Aeq, beq, A, b, lb, ub, timeLimit=None, backend="scip"):
+def _minimize(c, Aeq, beq, A, b, lb, ub, timeLimit=None, backend="scip",
+              threads=1, memory=float("inf")):
     """Minimize c*x; return ``(success, x, objective)``."""
     _, x = solver(
         np.asarray(c, dtype=float).ravel(),
         backend=backend,
         Aeq=Aeq, beq=beq, A=A, b=b, lb=lb, ub=ub,
-        opt="lp", timeLimit=timeLimit,
+        opt="lp", timeLimit=timeLimit, threads=threads, memory=memory,
     )
     if x is None:
         return False, None, 0.0
     return True, x, float(np.dot(np.asarray(c).ravel(), x))
 
 
-def optimizeCbModel(model: Model, backend="scip"):
+def optimizeCbModel(model: Model, backend="scip", threads=1,
+                    memory=float("inf")):
     """Maximize the model objective; return a small result object."""
 
     class Result:
@@ -148,7 +156,7 @@ def optimizeCbModel(model: Model, backend="scip"):
         model.c, model.S, model.b,
         np.zeros((0, model.S.shape[1])),
         np.zeros(0), model.lb, model.ub,
-        backend=backend,
+        backend=backend, threads=threads, memory=memory,
     )
     result.stat = 1 if success else 0
     result.x = x if x is not None else np.zeros(len(model.rxns))
